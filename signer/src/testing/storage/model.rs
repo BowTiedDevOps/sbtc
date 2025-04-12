@@ -235,13 +235,6 @@ impl TestData {
                 .expect("failed to write bitcoin block");
         }
 
-        for tx in self.transactions.iter() {
-            storage
-                .write_transaction(tx)
-                .await
-                .expect("failed to write transaction");
-        }
-
         for req in self.deposit_requests.iter() {
             storage
                 .write_deposit_request(req)
@@ -261,13 +254,6 @@ impl TestData {
                 .write_bitcoin_transaction(bitcoin_tx)
                 .await
                 .expect("failed to write bitcoin transaction");
-        }
-
-        for stacks_tx in self.stacks_transactions.iter() {
-            storage
-                .write_stacks_transaction(stacks_tx)
-                .await
-                .expect("failed to write stacks transaction");
         }
 
         for decision in self.deposit_signers.iter() {
