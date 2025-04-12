@@ -11,7 +11,6 @@ use crate::storage::model;
 use crate::storage::model::BitcoinBlock;
 use crate::storage::model::BitcoinBlockHash;
 use crate::storage::model::BitcoinBlockRef;
-use crate::testing::dummy::DepositTxConfig;
 
 use rand::seq::SliceRandom;
 
@@ -32,9 +31,6 @@ pub struct TestData {
 
     /// Deposit requests
     pub withdraw_requests: Vec<model::WithdrawalRequest>,
-
-    /// Raw transaction data
-    pub transactions: Vec<model::Transaction>,
 
     /// Connection between bitcoin blocks and transactions
     pub bitcoin_transactions: Vec<model::BitcoinTxRef>,
@@ -110,12 +106,6 @@ impl TestData {
             params.num_signers_per_request,
         );
 
-        let transactions = deposit_data
-            .transactions
-            .into_iter()
-            .chain(withdraw_data.transactions)
-            .collect();
-
         let bitcoin_blocks = vec![block.clone()];
         (
             Self {
@@ -127,7 +117,6 @@ impl TestData {
                 withdraw_signers: withdraw_data.withdraw_signers,
                 bitcoin_transactions: deposit_data.bitcoin_transactions,
                 stacks_transactions: withdraw_data.stacks_transactions,
-                transactions,
                 tx_outputs: Vec::new(),
             },
             block.into(),
@@ -146,7 +135,6 @@ impl TestData {
             .extend(new_data.bitcoin_transactions);
         self.stacks_transactions
             .extend(new_data.stacks_transactions);
-        self.transactions.extend(new_data.transactions);
         self.tx_outputs.extend(new_data.tx_outputs);
     }
 
@@ -160,7 +148,6 @@ impl TestData {
         vec_diff(&mut self.withdraw_signers, &other.withdraw_signers);
         vec_diff(&mut self.bitcoin_transactions, &other.bitcoin_transactions);
         vec_diff(&mut self.stacks_transactions, &other.stacks_transactions);
-        vec_diff(&mut self.transactions, &other.transactions);
         vec_diff(&mut self.tx_outputs, &other.tx_outputs);
     }
 
@@ -210,7 +197,6 @@ impl TestData {
 
         self.push(Self {
             bitcoin_transactions,
-            transactions,
             tx_outputs,
             ..Self::default()
         });
@@ -358,7 +344,6 @@ impl TestData {
 struct DepositData {
     pub deposit_requests: Vec<model::DepositRequest>,
     pub deposit_signers: Vec<model::DepositSigner>,
-    pub transactions: Vec<model::Transaction>,
     pub bitcoin_transactions: Vec<model::BitcoinTxRef>,
 }
 
@@ -377,16 +362,13 @@ impl DepositData {
         (0..num_deposit_requests).fold(Self::new(), |mut deposit_data, _| {
             let mut deposit_request: model::DepositRequest = fake::Faker.fake_with_rng(rng);
 
-            let deposit_config = DepositTxConfig {
-                aggregate_key: PublicKey::combine_keys(signer_keys)
-                    .unwrap_or_else(|_| fake::Faker.fake_with_rng(rng)),
-                ..fake::Faker.fake_with_rng(rng)
-            };
+            let aggregate_key = PublicKey::combine_keys(signer_keys)
+                .unwrap_or_else(|_| fake::Faker.fake_with_rng(rng));
 
-            let mut raw_transaction: model::Transaction = deposit_config.fake_with_rng(rng);
-            raw_transaction.block_hash = *bitcoin_block.block_hash.as_ref();
-            deposit_request.txid = raw_transaction.txid.into();
-            deposit_request.signers_public_key = deposit_config.aggregate_key.into();
+            let mut raw_transaction: model::BitcoinTxRef = fake::Faker.fake_with_rng(rng);
+            raw_transaction.block_hash = bitcoin_block.block_hash;
+            deposit_request.txid = raw_transaction.txid;
+            deposit_request.signers_public_key = aggregate_key.into();
 
             let deposit_signers: Vec<_> = signer_keys
                 .iter()
@@ -408,7 +390,6 @@ impl DepositData {
 
             deposit_data.bitcoin_transactions.push(bitcoin_transaction);
             deposit_data.deposit_requests.push(deposit_request);
-            deposit_data.transactions.push(raw_transaction);
             deposit_data.deposit_signers.extend(deposit_signers);
 
             deposit_data
