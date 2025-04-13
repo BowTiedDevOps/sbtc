@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 
-use bitcoin::hashes::Hash as _;
 use fake::Fake;
 
 use crate::keys::PublicKey;
@@ -158,22 +157,14 @@ impl TestData {
         sbtc_txs: Vec<(model::TransactionType, bitcoin::Transaction)>,
     ) {
         let mut bitcoin_transactions = vec![];
-        let mut transactions = vec![];
         let mut tx_outputs = Vec::new();
 
         for (tx_type, tx) in sbtc_txs {
-            let model_tx = model::Transaction {
-                txid: tx.compute_txid().to_byte_array(),
-                tx_type,
-                block_hash: block.block_hash.into_bytes(),
-            };
-
             let bitcoin_transaction = model::BitcoinTxRef {
-                txid: model_tx.txid.into(),
+                txid: tx.compute_txid().into(),
                 block_hash: block.block_hash,
             };
 
-            transactions.push(model_tx);
             bitcoin_transactions.push(bitcoin_transaction);
 
             let output_type = match tx_type {
@@ -185,7 +176,7 @@ impl TestData {
                 // In our tests we always happen to put the first output as
                 // the signers UTXO, even if it is a donation.
                 let tx_output = model::TxOutput {
-                    txid: tx.compute_txid().into(),
+                    txid: bitcoin_transaction.txid,
                     output_index: 0,
                     script_pubkey: tx_out.script_pubkey.clone().into(),
                     amount: tx_out.value.to_sat(),
