@@ -2,8 +2,12 @@
 
 use std::collections::HashSet;
 
+use bitcoin::ScriptBuf;
 use fake::Fake;
 
+use crate::bitcoin::utxo::BitcoinInputsOutputs;
+use crate::bitcoin::utxo::PrevoutRef;
+use crate::bitcoin::utxo::TxDeconstructor;
 use crate::keys::PublicKey;
 use crate::storage::DbWrite;
 use crate::storage::model;
@@ -12,6 +16,34 @@ use crate::storage::model::BitcoinBlockHash;
 use crate::storage::model::BitcoinBlockRef;
 
 use rand::seq::SliceRandom;
+
+/// A transaction input that implements the right stuff
+#[derive(Debug)]
+pub struct TestBitcoinTxInfo {
+    /// The transaction
+    pub tx: bitcoin::Transaction,
+    /// The outputs being spent as the inputs.
+    pub prevouts: Vec<bitcoin::TxOut>,
+}
+
+impl BitcoinInputsOutputs for TestBitcoinTxInfo {
+    fn tx_ref(&self) -> &bitcoin::Transaction {
+        self.tx.tx_ref()
+    }
+}
+
+impl TxDeconstructor for TestBitcoinTxInfo {
+    fn prevout(&self, index: usize) -> Option<PrevoutRef> {
+        let input = self.tx.input.get(index)?;
+        let prevout = self.prevouts.get(index)?;
+        Some(PrevoutRef {
+            amount: prevout.value,
+            script_pubkey: &prevout.script_pubkey,
+            txid: &input.previous_output.txid,
+            output_index: input.previous_output.vout,
+        })
+    }
+}
 
 /// Collection of related data usable for database tests.
 ///
@@ -45,6 +77,9 @@ pub struct TestData {
 
     /// transaction outputs
     pub tx_outputs: Vec<model::TxOutput>,
+
+    /// transaction outputs
+    pub tx_prevouts: Vec<model::TxPrevout>,
 }
 
 impl TestData {
@@ -117,6 +152,7 @@ impl TestData {
                 bitcoin_transactions: deposit_data.bitcoin_transactions,
                 stacks_transactions: withdraw_data.stacks_transactions,
                 tx_outputs: Vec::new(),
+                tx_prevouts: Vec::new(),
             },
             block.into(),
         )
@@ -135,6 +171,7 @@ impl TestData {
         self.stacks_transactions
             .extend(new_data.stacks_transactions);
         self.tx_outputs.extend(new_data.tx_outputs);
+        self.tx_prevouts.extend(new_data.tx_prevouts);
     }
 
     /// Remove data in `other` present in the current model.
@@ -148,6 +185,7 @@ impl TestData {
         vec_diff(&mut self.bitcoin_transactions, &other.bitcoin_transactions);
         vec_diff(&mut self.stacks_transactions, &other.stacks_transactions);
         vec_diff(&mut self.tx_outputs, &other.tx_outputs);
+        vec_diff(&mut self.tx_prevouts, &other.tx_prevouts);
     }
 
     /// Push bitcoin txs to a specific bitcoin block
@@ -172,6 +210,7 @@ impl TestData {
                 model::TransactionType::Donation => model::TxOutputType::Donation,
                 _ => continue,
             };
+
             if let Some(tx_out) = tx.output.first() {
                 // In our tests we always happen to put the first output as
                 // the signers UTXO, even if it is a donation.
@@ -189,6 +228,42 @@ impl TestData {
         self.push(Self {
             bitcoin_transactions,
             tx_outputs,
+            ..Self::default()
+        });
+    }
+
+    /// Push bitcoin txs to a specific bitcoin block
+    pub fn push_bitcoin_txs2(
+        &mut self,
+        block: &BitcoinBlockRef,
+        txs: Vec<TestBitcoinTxInfo>,
+        signer_script_pubkeys: &HashSet<ScriptBuf>,
+    ) {
+        let mut bitcoin_transactions = vec![];
+        let mut tx_outputs = Vec::new();
+        let mut tx_prevouts = Vec::new();
+
+        for tx_info in txs {
+            let bitcoin_transaction = model::BitcoinTxRef {
+                txid: tx_info.tx.compute_txid().into(),
+                block_hash: block.block_hash,
+            };
+
+            bitcoin_transactions.push(bitcoin_transaction);
+
+            for tx_output in tx_info.to_tx_outputs(signer_script_pubkeys) {
+                tx_outputs.push(tx_output);
+            }
+
+            for tx_prevout in tx_info.to_inputs(signer_script_pubkeys) {
+                tx_prevouts.push(tx_prevout);
+            }
+        }
+
+        self.push(Self {
+            bitcoin_transactions,
+            tx_outputs,
+            tx_prevouts,
             ..Self::default()
         });
     }
@@ -249,6 +324,10 @@ impl TestData {
 
         for tx_output in self.tx_outputs.iter() {
             storage.write_tx_output(tx_output).await.unwrap();
+        }
+
+        for tx_prevout in self.tx_prevouts.iter() {
+            storage.write_tx_prevout(tx_prevout).await.unwrap();
         }
     }
 
