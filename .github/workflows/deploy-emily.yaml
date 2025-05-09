@@ -20,6 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ replace(github.ref_name, 'environment/', '') }}
     steps:
+      - name: Print Env
+        id: print_env
+        run: |
+          echo "${AWS_DEPLOYMENT_PROFILE}"
+          echo "${{ env.AWS_DEPLOYMENT_PROFILE }}"
+          echo "${AWS_REGION}"
+          echo "${{ env.AWS_REGION }}"
+
       - name: Checkout Repository
         id: checkout_repository
         uses: stacks-sbtc/actions/checkout@095003d35774808f27b29f272976b1e01704ca93
