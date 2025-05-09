@@ -1,0 +1,62 @@
+name: Deploy Emily
+
+on:
+  push:
+    branches:
+      - 'environment/*'
+
+concurrency:
+  group: docker-image-${{ github.head_ref || github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  EMILY_HANDLER_PATH: "emily/handler"
+  EMILY_CDK_PATH: "emily/cdk"
+  NODE_VERSION: 20
+
+jobs:
+  deploy:
+    name: Deploy Emily
+    runs-on: ubuntu-latest
+    environment: ${{ replace(github.ref_name, 'environment/', '') }}
+    steps:
+      - name: Checkout Repository
+        id: checkout_repository
+        uses: stacks-sbtc/actions/checkout@095003d35774808f27b29f272976b1e01704ca93
+
+      - name: Setup Rust
+        id: setup_rust
+        uses: stacks-sbtc/actions/setup-rust-toolchain@095003d35774808f27b29f272976b1e01704ca93
+
+      - name: Build Emily
+        id: build_emily
+        working-directory: ${{ env.EMILY_HANDLER_PATH }}
+        run: |
+          echo "Building emily-lambda..."
+          cargo lambda build \
+            --bin emily-lambda \
+            --release \
+            --output-format zip \
+            --x86-64
+          echo "Done building emily lambda."
+
+      - name: Setup Node
+        id: setup_node
+        uses: stacks-sbtc/actions/setup-node@095003d35774808f27b29f272976b1e01704ca93
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: CDK Bootstrap & Diff
+        id: cdk_bootstrap_diff
+        working-directory: ${{ env.EMILY_CDK_PATH }}
+        run: |
+          echo "Ensuring that CDK is boostraped..."
+          npx aws-cdk bootstrap --profile "${AWS_DEPLOYMENT_PROFILE}"
+          echo "Done bootstrapping CDK."
+          npx aws-cdk diff --profile "${AWS_DEPLOYMENT_PROFILE}"
+
+      - name: Deploy Emily
+        id: deploy_emily
+        working-directory: ${{ env.EMILY_CDK_PATH }}
+        run: |
+          echo "Deploying the stack..."
