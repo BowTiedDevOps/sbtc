@@ -95,7 +95,11 @@ jobs:
           {
             echo "## CDK Diff Output"
             echo '```diff'
-            sed -E 's/^(.*)\[\+\]/+ \1[+]/; s/^(.*)\[\-\]/- \1[-]/' cdk-diff-output.txt
+            sed -E '
+            s/^(.*)\[\+\]/+ \1[+]/;
+            s/^(.*)\[\-\]/- \1[-]/;
+            /\[\+\]/!{/ \[\-\]/!s/^/  /}
+            ' cdk-diff-output.txt
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
 
