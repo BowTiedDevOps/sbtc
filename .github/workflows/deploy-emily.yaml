@@ -14,7 +14,7 @@ on:
           - environment/mainnet
           - environment/staging
           - environment/private-mainnet
-  pull_request:
+  pull_request_target:
     branches:
       - main
 
@@ -114,6 +114,8 @@ jobs:
       - name: Checkout Repository
         id: checkout_repository
         uses: stacks-sbtc/actions/checkout@a1754bb138bf66f595c6c42068fbc2e09a447e73
+        with:
+          ref: ${{ github.base_ref || github.ref }} 
 
       - name: Configure AWS Credentials via OIDC
         id: configure_aws
@@ -215,6 +217,8 @@ jobs:
       - name: Checkout Repository
         id: checkout_repository
         uses: stacks-sbtc/actions/checkout@a1754bb138bf66f595c6c42068fbc2e09a447e73
+        with:
+          ref: ${{ github.base_ref || github.ref }} 
 
       - name: Configure AWS Credentials via OIDC
         id: configure_aws
